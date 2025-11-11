@@ -1,0 +1,10 @@
+{
+  "login": "登录 Nusafin",
+  "email": "电子邮箱",
+  "password": "密码",
+  "submit": "登录",
+  "noAccount": "还没有账户？",
+  "registerHere": "点击注册",
+  "invalidCredentials": "邮箱或密码错误",
+  "loading": "加载中..."
+}
