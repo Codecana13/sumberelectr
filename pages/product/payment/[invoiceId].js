@@ -6,6 +6,7 @@ import { auth, firestore } from '@/utils/firebase'; // 1. Pastikan 'auth' di-imp
 import { onAuthStateChanged } from 'firebase/auth'; // 1. Import onAuthStateChanged
 // Navbar and Footer intentionally omitted on payment page to provide a focused checkout flow
 import Image from 'next/image'; // 1. Pastikan Image di-import
+import Script from 'next/script';
 
 // === PATCH COURIERS ===
 // Hapus JNE Trucking dari pilihan pengiriman, tambahkan J&T ke COD_ALLOWED_COURIERS
@@ -29,7 +30,7 @@ const INSTANT_RADIUS_KM = Number(process.env.NEXT_PUBLIC_INSTANT_MAX_RADIUS_KM |
 const COD_DISABLED = true; // COD permanently disabled
 // const COD_FEE_RATE = 0.05; // no longer used
 // const COD_PENDING_STATUS = 'waiting'; // no longer used
-const TRANSFER_FEE = 4000; // Biaya pembayaran untuk metode Xendit/Transfer
+const TRANSFER_FEE = 4000; // Biaya pembayaran untuk metode Transfer
 
 // Haversine
 function calcDistanceKm(lat1,lng1,lat2,lng2){
@@ -153,7 +154,7 @@ export default function PaymentPage() {
   const [userInstantCoord, setUserInstantCoord] = useState(null); // koordinat tersimpan di user
   const [autoUsingSavedInstant, setAutoUsingSavedInstant] = useState(false);
   const [geocodingLoading, setGeocodingLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('xendit'); // single method: 'xendit'
+  const [paymentMethod, setPaymentMethod] = useState('midtrans'); // default to Midtrans
   // === FIX: Tambahkan alias supaya tidak ReferenceError ===
   // Gunakan satu sumber kebenaran (codEligible). Jika nanti ada logika tambahan,
   // tinggal ubah perhitungan effectiveCodEligible di sini.
@@ -1121,7 +1122,7 @@ export default function PaymentPage() {
   };
 
   // === Create Xendit Invoice ===
-  const handleCreateXenditPayment = async () => {
+  const handleCreateMidtransPayment = async () => {
     if (!invoice) return;
     if (!shippingConfirmed && !invoice.shippingSelection) {
       alert('Simpan / konfirmasi pengiriman dulu.');
@@ -1137,35 +1138,22 @@ export default function PaymentPage() {
     const shippingUsed = invoice.shippingSelection?.price || invoice.shippingCost || 0;
     let discountToApply = (voucherApplied && voucherDiscount > 0) ? voucherDiscount : Number(invoice.voucherDiscount || 0);
     if (discountToApply > productSubtotal) discountToApply = productSubtotal;
-  const isTransfer = true; // this handler is only for Xendit transfer/VA flow
+  const isTransfer = true; // transfer via Midtrans Snap
   const amountNow = Math.max(productSubtotal - discountToApply,0) + shippingUsed + (isTransfer ? TRANSFER_FEE : 0);
 
     // Jika sudah ada link dan totalnya cocok, langsung pakai link tersebut
-    if (invoice?.xendit?.invoiceUrl && Math.round(Number(invoice.grandTotal||0)) === Math.round(amountNow)) {
-      try {
-        const win = window.open(invoice.xendit.invoiceUrl, '_blank');
-        if (!win) window.location.href = invoice.xendit.invoiceUrl;
-        setTimeout(()=> router.replace('/account'), 1000);
-      } finally {
-        setXenditLoading(false);
-      }
-      return;
-    }
+    // Midtrans: always create new token to ensure latest total
 
-    const popup = window.open('', '_blank');
-    if (popup) {
-      popup.document.write('<!DOCTYPE html><html><head><title>Memuat Pembayaran...</title><meta charset="utf-8" /></head><body style="font-family:system-ui;padding:18px;text-align:center"><div style="font-size:14px;margin-bottom:8px;">Menyiapkan halaman pembayaran...</div><div id="spin" style="display:inline-block;width:32px;height:32px;border:4px solid #ddd;border-top:4px solid #ef4444;border-radius:50%;animation:spin 0.9s linear infinite"></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></body></html>');
-    }
+    // Midtrans Snap opens a popup overlay; stay on this page
     // Sinkronkan nilai terkini ke invoice sebelum membuat pembayaran
     try {
       if (!isGuestInvoice) {
         await updateDoc(doc(firestore,'invoices',String(invoiceId)),{
           voucherDiscount: discountToApply,
           grandTotal: amountNow,
-          paymentMethod: 'xendit',
+          paymentMethod: 'midtrans',
           status: invoice.status === 'draft' ? 'waiting' : invoice.status,
           updatedAt: serverTimestamp(),
-          'xendit.invoiceUrl': null,
           transferFee: TRANSFER_FEE,
         });
       }
@@ -1173,81 +1161,52 @@ export default function PaymentPage() {
         ...prev,
         voucherDiscount: discountToApply,
         grandTotal: amountNow,
-        paymentMethod: 'xendit',
+        paymentMethod: 'midtrans',
         status: prev.status === 'draft' ? 'waiting' : prev.status,
-        xendit: { ...(prev.xendit||{}), invoiceUrl: null }
+        midtrans: { ...(prev.midtrans||{}), token: null }
       } : prev);
     } catch (e) {
       console.warn('Sinkronisasi invoice gagal (lanjut membuat pembayaran):', e);
     }
 
-    let paymentUrl = null; // <-- gunakan variable luar, jangan overshadow
     try {
-      const resp = await fetch('/api/xendit/create-invoice', {
+      const resp = await fetch('/api/midtrans/create-transaction', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          invoiceId: invoice.invoiceId || invoiceId,
-          amount: amountNow,
-          payer_email: user?.email || invoice.buyerEmail,
-          payer_name: user?.name || invoice.buyerName,
-          payer_phone: user?.phone || invoice.buyerPhone,
-          description: `Pembayaran Invoice ${invoice.invoiceId || invoiceId}`,
-          success_url: `${window.location.origin}/account`,
-          failure_url: `${window.location.origin}/product/payment/${invoice.invoiceId || invoiceId}`
-        })
+        body: JSON.stringify({ invoiceId: invoice.invoiceId || invoiceId })
       });
       const data = await resp.json();
-      if (!resp.ok) {
-        const details = data?.details || data?.error || JSON.stringify(data);
-        throw new Error(`Gagal membuat invoice Xendit: ${details}`);
+      if (!resp.ok) throw new Error(data?.error || 'Gagal membuat transaksi Midtrans');
+
+      const token = data.token;
+      if (!token) throw new Error('Token Snap tidak tersedia');
+      if (!window.snap) {
+        setXenditError('Snap belum siap. Muat ulang halaman dan coba lagi.');
+        return;
       }
-      console.log('Xendit response:', data);
 
-      paymentUrl = data.invoice_url || data.url || null;
-
-      setInvoice(prev => prev ? {
-        ...prev,
-        paymentMethod:'xendit',
-        status: prev.status === 'draft' ? 'waiting' : prev.status,
-        xendit: {
-          ...(prev.xendit||{}),
-          id: data.id,
-          amount: amountNow,
-          status: data.status || 'PENDING',
-          invoiceUrl: paymentUrl || null,
-          rawCreate: data
+      window.snap.pay(token, {
+        onSuccess: function(result){
+          console.log('Midtrans success', result);
+          alert('Pembayaran berhasil.');
+          router.replace('/account');
+        },
+        onPending: function(result){
+          console.log('Midtrans pending', result);
+          alert('Menunggu pembayaran.');
+          // Tetap di halaman; buyer bisa menutup popup dan menyelesaikan nanti
+        },
+        onError: function(result){
+          console.error('Midtrans error', result);
+          setXenditError('Pembayaran gagal. Coba lagi atau pilih metode lain.');
+        },
+        onClose: function(){
+          console.log('Midtrans popup closed');
         }
-      } : prev);
-    } catch(e){
-      console.error('Create Xendit error:', e);
-      setXenditError(e.message || String(e) || 'Gagal membuat pembayaran.');
-      if (popup && !popup.closed) {
-        popup.document.body.innerHTML =
-          `<div style="font-family:system-ui;padding:18px;color:#b91c1c">
-             <h3 style="margin:0 0 8px;font-size:15px;">Gagal Membuat Pembayaran</h3>
-             <div style="font-size:12px;line-height:1.4">${e.message || String(e) || 'Terjadi kesalahan.'}</div>
-             <button onclick="window.close()" style="margin-top:14px;padding:6px 10px;font-size:12px;background:#b91c1c;color:#fff;border:none;border-radius:4px;cursor:pointer">Tutup</button>
-           </div>`;
-      }
-      setXenditLoading(false);
-      return;
-    }
-
-    try {
-      if (paymentUrl) {
-        if (popup && !popup.closed) popup.location.href = paymentUrl;
-        else window.location.href = paymentUrl;
-        setTimeout(()=> {
-          if (router.asPath !== '/account') router.replace('/account');
-        }, 1000);
-      } else {
-        if (popup && !popup.closed) {
-          popup.document.body.innerHTML =
-            '<div style="font-family:system-ui;padding:18px;color:#b45309">URL pembayaran tidak diterima. Silakan tutup jendela ini dan coba lagi.</div>';
-        }
-        setXenditError('Payment URL tidak diterima. Coba lagi.');
-      }
+      });
+    } catch (e) {
+      console.error('Create Midtrans error:', e);
+      setXenditError(e.message || String(e));
     } finally {
       setXenditLoading(false);
     }
@@ -1275,7 +1234,7 @@ export default function PaymentPage() {
      shippingCost ??
      0);
 
-  const isTransfer = true; // Only Xendit is available
+  const isTransfer = true; // Transfer (Midtrans)
   const calculatedTransferFee = TRANSFER_FEE;
 
   const totalInvoice = baseAmount + shippingCostForCalc + calculatedTransferFee;
@@ -1587,20 +1546,15 @@ export default function PaymentPage() {
                 <input
                   type="radio"
                   name="paymethod"
-                  value="xendit"
-                  checked={paymentMethod==='xendit'}
-                  onChange={()=> setPaymentMethod('xendit')}
+                  value="midtrans"
+                  checked={paymentMethod==='midtrans'}
+                  onChange={()=> setPaymentMethod('midtrans')}
                 />
-                <span>Transfer / VA / E-Wallet (Xendit)</span>
+                <span>Transfer / VA / E-Wallet (Midtrans)</span>
               </span>
               <span className="text-[10px] text-gray-500">
-                Bayar via halaman resmi Xendit (VA / QRIS / e-Wallet). Simpan pengiriman dahulu.
+                Bayar via Midtrans Snap (VA / QRIS / e-Wallet). Simpan pengiriman dahulu.
               </span>
-              {invoice?.xendit?.invoiceUrl && paymentMethod==='xendit' && (
-                <span className="text-[10px] text-green-600">
-                  Link pembayaran sudah dibuat.
-                </span>
-              )}
             </label>
           </div>
         </section>
@@ -1673,10 +1627,10 @@ export default function PaymentPage() {
           <div className="space-y-2">
             <button
               className="bg-red-600 text-white px-2 py-2 rounded w-full text-sm font-bold disabled:opacity-50"
-              disabled={xenditLoading || !shippingSelection || editingShipping}
-              onClick={handleCreateXenditPayment}
+              disabled={xenditLoading || !shippingSelection || editingShipping || paymentMethod!=='midtrans'}
+              onClick={handleCreateMidtransPayment}
             >
-              {xenditLoading ? 'Memproses...' : 'Bayar Sekarang'}
+              {xenditLoading ? 'Memproses...' : 'Bayar via Midtrans'}
             </button>
             {xenditError && (
               <p className="text-[10px] text-red-600">{xenditError}</p>
@@ -1684,6 +1638,16 @@ export default function PaymentPage() {
           </div>
         </section>
   </main>
+
+      {/* Midtrans Snap script */}
+      <Script
+        id="midtrans-snap"
+        src={(String(process.env.NEXT_PUBLIC_MIDTRANS_IS_PRODUCTION||process.env.MIDTRANS_IS_PRODUCTION)==='true')
+          ? 'https://app.midtrans.com/snap/snap.js'
+          : 'https://app.sandbox.midtrans.com/snap/snap.js'}
+        data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY || process.env.MIDTRANS_CLIENT_KEY_SANDBOX}
+        strategy="afterInteractive"
+      />
 
       {/* Modal Map */}
       {showMap && (
