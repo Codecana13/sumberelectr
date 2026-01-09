@@ -26,7 +26,6 @@ async function fetchSitemapData(adminDb, baseUrl) {
   // Static, public pages
   urls.push({ loc: `${baseUrl}/`, changefreq: 'daily', priority: 1.0 });
   urls.push({ loc: `${baseUrl}/all-product`, changefreq: 'daily', priority: 0.8 });
-  urls.push({ loc: `${baseUrl}/search`, changefreq: 'daily', priority: 0.6 });
 
   // Dynamic products and categories
   try {
@@ -117,7 +116,8 @@ export async function getServerSideProps({ req, res }) {
     const xml = buildXml(urls);
 
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, s-maxage=43200, stale-while-revalidate=86400');
+    // Keep this fairly fresh so new products/articles appear quickly without rebuild.
+    res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.write(xml);
     res.end();
   } catch (e) {
