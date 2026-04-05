@@ -368,21 +368,8 @@ export async function getStaticProps() {
     }
     ogImage = bannerMeta[0]?.url || null;
 
-    // Attempt to load precomputed daily layout summary
-    let summaryDoc = null;
+    // Retrieve all products and pick randomly for Terlaris and Rekomendasi
     try {
-      const doc = await adminDb.collection('layout_summaries').doc('latest').get();
-      if (doc.exists) summaryDoc = doc.data();
-    } catch (e) {
-      // ignore summary errors, fallback below
-    }
-    if (summaryDoc) {
-      favoriteFish = Array.isArray(summaryDoc.favorites) ? summaryDoc.favorites : [];
-      recommendations = Array.isArray(summaryDoc.recommendations) ? summaryDoc.recommendations : [];
-      favoritesSchema = Array.isArray(summaryDoc.favoritesSchema) ? summaryDoc.favoritesSchema : [];
-      recommendationsSchema = Array.isArray(summaryDoc.recommendationsSchema) ? summaryDoc.recommendationsSchema : [];
-    } else {
-      // Fallback: on-demand minimal build (kept until summary function fully reliable)
       const productsSnap = await adminDb.collection('products').get();
       const lean = [];
       productsSnap.forEach(doc => {
@@ -412,7 +399,10 @@ export async function getStaticProps() {
           categorySlug: d.categorySlug || (d.category ? d.category.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') : ''),
           image: firstImage || null,
           images: firstImage ? [firstImage] : [],
-            sizeVariants,
+          sizeVariants,
+          price: d.price ?? d.priceRetail ?? d.price_retail ?? 0,
+          priceRetail: d.priceRetail ?? d.price_retail ?? d.price ?? 0,
+          priceWholesale: d.priceWholesale ?? d.price_wholesale ?? null,
           discount: d.discount || 0,
           rating: d.rating || null,
           sold: d.sold || d.salesCount || 0,
@@ -435,6 +425,8 @@ export async function getStaticProps() {
       const shuffle = arr => arr.sort(() => Math.random() - 0.5);
       favoriteFish = shuffle([...filtered]).slice(0, 8);
       recommendations = shuffle([...filtered]).slice(0, 12);
+    } catch (e) {
+      console.error('Failed to load products for randomization', e);
     }
 
     const articleSnap = await adminDb.collection('articles').orderBy('createdAt', 'desc').limit(4).get();

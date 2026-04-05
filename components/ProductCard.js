@@ -46,19 +46,18 @@ const ProductCard = ({ product, onAddToCart }) => {
       (min, v) => {
         const retail = Number(v.priceRetail) || 0;
         const wholesale = Number(v.priceWholesale) || 0;
-        const currentMin = Math.min(retail, wholesale);
-        return currentMin < min ? currentMin : min;
+        const validPrices = [retail, wholesale].filter(p => p > 0);
+        const currentMin = validPrices.length > 0 ? Math.min(...validPrices) : 0;
+        if (min === null) return currentMin;
+        return currentMin > 0 && currentMin < min ? currentMin : min;
       },
-      Math.min(
-        Number(product.sizeVariants[0].priceRetail) || 0,
-        Number(product.sizeVariants[0].priceWholesale) || 0
-      )
+      null
     );
   } else {
-    minPrice = Math.min(
-      Number(product.priceRetail ?? product.price ?? 0),
-      Number(product.priceWholesale ?? product.price ?? 0)
-    );
+    const pR = Number(product.priceRetail ?? product.price ?? 0);
+    const pW = Number(product.priceWholesale ?? product.price ?? 0);
+    const valid = [pR, pW].filter(p => p > 0);
+    minPrice = valid.length > 0 ? Math.min(...valid) : 0;
   }
 
   const { getFor } = useDiscounts();
