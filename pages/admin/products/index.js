@@ -388,10 +388,10 @@ export default function ProductListPage() {
 
     const productSlug = slugify(form.name);
 
-    // Generate random sold, rating, and reviewCount
-    const sold = Math.floor(Math.random() * (145 - 34 + 1)) + 34;
-    const rating = (Math.random() * (5 - 4.5) + 4.5).toFixed(1);
-    const reviewCount = Math.floor(Math.random() * (Math.min(240, sold) - 27 + 1)) + 27;
+    // Disable random sold, rating, and reviewCount for initial upload
+    const sold = 0;
+    const rating = 0;
+    const reviewCount = 0;
 
     const productData = {
       name: form.name,
@@ -426,23 +426,7 @@ export default function ProductListPage() {
         const docRef = await addDoc(collection(firestore, 'products'), productData);
         setSuccess('Produk berhasil ditambahkan.');
 
-        // Seed bot reviews server-side for the new product
-        try {
-          const resp = await fetch('/api/seed-reviews', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ productId: docRef.id })
-          });
-          if (!resp.ok) throw new Error('seed api not ok');
-          await resp.json().catch(() => null);
-        } catch (seedErr) {
-          console.warn('Seed reviews API gagal, fallback ke client seed');
-          if (ALLOW_CLIENT_REVIEW_SEED) {
-            await seedReviewsClient(docRef.id, 10);
-          } else {
-            console.warn('Lewati client seeding (set NEXT_PUBLIC_ALLOW_CLIENT_REVIEW_SEED=true untuk mengaktifkan di dev)');
-          }
-        }
+        // Seed bot reviews logic removed per user request
       }
       setForm({
         name: '',
@@ -728,9 +712,9 @@ export default function ProductListPage() {
           const categorySlug = catDoc.slug || getCategorySlug(categoryRaw);
           const categoryId = catDoc.id || null;
           const productSlug = slugify(name);
-          const sold = Math.floor(Math.random() * (145 - 34 + 1)) + 34;
-          const rating = Number((Math.random() * (5 - 4.5) + 4.5).toFixed(1));
-          const reviewCount = Math.floor(Math.random() * (Math.min(240, sold) - 27 + 1)) + 27;
+          const sold = 0;
+          const rating = 0;
+          const reviewCount = 0;
           const images = [image1, image2, image3].map(s => String(s || '').trim()).filter(Boolean);
           mapped.push({
             name,
@@ -794,9 +778,9 @@ export default function ProductListPage() {
           const categorySlug = catDoc?.slug || getCategorySlug(category);
           const categoryId = catDoc?.id || null;
           const productSlug = slugify(name);
-          const sold = Math.floor(Math.random() * (145 - 34 + 1)) + 34;
-          const rating = Number((Math.random() * (5 - 4.5) + 4.5).toFixed(1));
-          const reviewCount = Math.floor(Math.random() * (Math.min(240, sold) - 27 + 1)) + 27;
+          const sold = 0;
+          const rating = 0;
+          const reviewCount = 0;
           mapped.push({
             name,
             category,
@@ -875,27 +859,9 @@ export default function ProductListPage() {
         await batch.commit();
         importedIds = importedIds.concat(idsInChunk);
 
-        // Seed reviews hanya untuk produk baru
-        for (const info of seedPlan) {
-          if (!info.isNew) continue;
-          try {
-            const resp = await fetch('/api/seed-reviews', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ productId: info.id })
-            });
-            if (!resp.ok) throw new Error('seed api not ok');
-          } catch (seedErr) {
-            console.warn('Seed reviews API gagal (bulk), fallback client seed untuk', info.id);
-            if (ALLOW_CLIENT_REVIEW_SEED) {
-              await seedReviewsClient(info.id, 10);
-            } else {
-              console.warn('Lewati client seeding (NEXT_PUBLIC_ALLOW_CLIENT_REVIEW_SEED=false).');
-            }
-          }
-        }
+        // Seed reviews logic removed per user request
       }
-  setBulkSuccessMessage(`${bulkProductsReady.length} produk berhasil diimport.${ALLOW_CLIENT_REVIEW_SEED ? ' Ulasan otomatis ditambahkan untuk produk baru.' : ' (Catatan: seeding ulasan via client dimatikan; aktifkan NEXT_PUBLIC_ALLOW_CLIENT_REVIEW_SEED=true di dev atau pastikan API admin jalan.)'}`);
+  setBulkSuccessMessage(`${bulkProductsReady.length} produk berhasil diimport.`);
       fetchProducts();
       setBulkProductsReady([]);
     } catch (err) {
