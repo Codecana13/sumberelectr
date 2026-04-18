@@ -100,8 +100,9 @@ const SingleProductPage = ({ product, relatedProducts, crossProducts, reviews: i
     return { baseMinPrice: min, baseMaxPrice: max };
   }, [product]);
   const { getFor } = useDiscounts();
+  const subCatKey = (product.subCategorySlug || product.subCategory || '').toString();
   const catKey = (product.categorySlug || product.category || '').toString();
-  const categoryDiscount = getFor(catKey);
+  const categoryDiscount = getFor(subCatKey) || getFor(catKey);
   const discount = Number(product.discount) || Number(categoryDiscount) || 0;
   const finalMin = discount > 0 ? Math.round(baseMinPrice * (1 - discount / 100)) : baseMinPrice;
   const finalMax = discount > 0 ? Math.round(baseMaxPrice * (1 - discount / 100)) : baseMaxPrice;

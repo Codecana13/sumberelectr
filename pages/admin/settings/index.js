@@ -33,6 +33,7 @@ export default function AdminSettingsPage() {
   const [chatOk, setChatOk] = useState('');
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('');
+  const [parentId, setParentId] = useState('');
   const [imgUploading, setImgUploading] = useState(false);
   const fileInputRef = useRef(null);
   const { uploadFile } = useStorage();
@@ -516,11 +517,13 @@ export default function AdminSettingsPage() {
         slug,
         icon: icon.trim() || '',
         active: true,
+        parentId: parentId || null,
         createdAt: serverTimestamp()
       });
       setOk('Kategori ditambah.');
       setName('');
       setIcon('');
+      setParentId('');
     } catch (err) {
       setError(err.message || 'Gagal menambah.');
     } finally {
@@ -925,6 +928,21 @@ export default function AdminSettingsPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
+              Kategori Induk (Kosongkan jika Utama)
+            </label>
+            <select
+              value={parentId}
+              onChange={e => setParentId(e.target.value)}
+              className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-orange-400 mb-4"
+            >
+              <option value="">-- Kategori Utama --</option>
+              {cats.filter(c => !c.parentId).map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
               URL Icon (opsional)
             </label>
             <div className="flex gap-2">
@@ -981,11 +999,22 @@ export default function AdminSettingsPage() {
         <div className="mt-8">
           <h2 className="text-sm font-semibold text-gray-700 mb-3">Daftar Kategori</h2>
           <div className="bg-white border rounded-lg shadow-sm divide-y">
-            {cats.length === 0 && (
-              <div className="p-4 text-xs text-gray-500">Belum ada kategori.</div>
-            )}
-            {cats.map(cat => (
-              <div key={cat.id} className="flex flex-col gap-3 p-3">
+            {(() => {
+              const mainCats = cats.filter(c => !c.parentId);
+              const groupedCats = [];
+              mainCats.forEach(main => {
+                groupedCats.push(main);
+                groupedCats.push(...cats.filter(c => c.parentId === main.id));
+              });
+              // Append any orphaned subcategories at the very end
+              groupedCats.push(...cats.filter(c => c.parentId && !mainCats.find(m => m.id === c.parentId)));
+              
+              if (groupedCats.length === 0) {
+                return <div className="p-4 text-xs text-gray-500">Belum ada kategori.</div>;
+              }
+              
+              return groupedCats.map(cat => (
+              <div key={cat.id} className={`flex flex-col gap-3 p-3 ${cat.parentId ? 'ml-8 border-l-2 border-blue-200 bg-blue-50/30' : ''}`}>
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 flex items-center justify-center rounded bg-gray-50 border">
                   {cat.icon ? (
@@ -1003,7 +1032,7 @@ export default function AdminSettingsPage() {
                   )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-800">{cat.name}</div>
+                    <div className="text-sm font-medium text-gray-800">{cat.name} {cat.parentId ? <span className="text-[10px] bg-blue-50 text-blue-600 px-1 py-0.5 rounded ml-1">Subkategori dari {cats.find(c => c.id === cat.parentId)?.name || 'Kategori Terhapus'}</span> : <span className="text-[10px] bg-green-50 text-green-600 px-1 py-0.5 rounded ml-1">Kategori Utama</span>}</div>
                     <div className="text-[11px] text-gray-500">/{cat.slug}</div>
                   </div>
                   <button
@@ -1015,6 +1044,7 @@ export default function AdminSettingsPage() {
                 </div>
 
                 {/* Discount controls */}
+                {cat.parentId ? (
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                   <div>
                     <label className="block text-[11px] text-gray-600 mb-1">Diskon (%)</label>
@@ -1069,8 +1099,12 @@ export default function AdminSettingsPage() {
                     >Nonaktifkan</button>
                   </div>
                 </div>
+                ) : (
+                  <div className="text-xs text-gray-500 italic py-2">Diskon hanya dapat diatur pada Subkategori.</div>
+                )}
               </div>
-            ))}
+            ));
+            })()}
           </div>
         </div>
       </div>

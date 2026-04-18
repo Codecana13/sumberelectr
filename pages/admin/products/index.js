@@ -73,10 +73,10 @@ export default function ProductListPage() {
   const [categoryDocs, setCategoryDocs] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
 
-  // Form state without variants/wholesale
   const [form, setForm] = useState({
     name: '',
     category: '',
+    subCategory: '',
     stock: '',
     price: '',
     weight: '',
@@ -172,7 +172,8 @@ export default function ProductListPage() {
           id: d.id,
           name: data.name || 'Kategori',
           slug: data.slug || getCategorySlug(data.name),
-          icon: data.icon || ''
+          icon: data.icon || '',
+          parentId: data.parentId || null
         });
       });
       setCategoryDocs(list);
@@ -382,9 +383,13 @@ export default function ProductListPage() {
       }
     }
 
-  const catDoc = categoryDocs.find(c => c.name === form.category);
+  const catDoc = categoryDocs.find(c => c.name === form.category && !c.parentId);
     const categorySlug = catDoc?.slug || getCategorySlug(form.category);
     const categoryId = catDoc?.id || null;
+
+    const subCatDoc = categoryDocs.find(c => c.name === form.subCategory && c.parentId === categoryId);
+    const subCategorySlug = subCatDoc?.slug || getCategorySlug(form.subCategory);
+    const subCategoryId = subCatDoc?.id || null;
 
     const productSlug = slugify(form.name);
 
@@ -398,6 +403,9 @@ export default function ProductListPage() {
       category: form.category,
       categoryId,
       categorySlug, // For SEO
+      subCategory: form.subCategory || null,
+      subCategoryId,
+      subCategorySlug,
       stock: Number(form.stock),
       weight: form.weight ? Number(form.weight) : null,
       // pricing: single price; keep priceRetail for compatibility, no wholesale
@@ -431,6 +439,7 @@ export default function ProductListPage() {
       setForm({
         name: '',
         category: '',
+        subCategory: '',
         stock: '',
         price: '',
         weight: '',
@@ -460,6 +469,7 @@ export default function ProductListPage() {
     setForm({
       name: product.name || '',
       category: product.category || '',
+      subCategory: product.subCategory || '',
       stock: product.stock || '',
       price: product.price || product.priceRetail || '',
       weight: product.weight || '',
@@ -927,7 +937,7 @@ export default function ProductListPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Kategori</label>
+                <label className="block text-sm font-medium mb-1">Kategori Utama</label>
                 <select
                   name="category"
                   value={form.category}
@@ -936,8 +946,8 @@ export default function ProductListPage() {
                   disabled={categoriesLoading}
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
                 >
-                  <option value="">{categoriesLoading ? 'Memuat kategori...' : 'Pilih Kategori'}</option>
-                  {categoryDocs.map(cat => (
+                  <option value="">{categoriesLoading ? 'Memuat kategori...' : 'Pilih Kategori Utama'}</option>
+                  {categoryDocs.filter(c => !c.parentId).map(cat => (
                     <option key={cat.id} value={cat.name}>{cat.name}</option>
                   ))}
                 </select>
@@ -947,6 +957,23 @@ export default function ProductListPage() {
                   </p>
                 )}
               </div>
+              {form.category && categoryDocs.find(c => c.name === form.category) && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Sub Kategori (Opsional)</label>
+                <select
+                  name="subCategory"
+                  value={form.subCategory}
+                  onChange={handleFormChange}
+                  disabled={categoriesLoading}
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+                >
+                  <option value="">Pilih Sub Kategori</option>
+                  {categoryDocs.filter(c => c.parentId === categoryDocs.find(main => main.name === form.category)?.id).map(cat => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              )}
               <div>
                 <label className="block text-sm font-medium mb-1">Stok</label>
                 <input

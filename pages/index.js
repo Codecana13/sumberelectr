@@ -397,6 +397,8 @@ export async function getStaticProps() {
           slug: d.slug || d.productSlug || null,
           category: d.category || d.categoryName || '',
           categorySlug: d.categorySlug || (d.category ? d.category.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') : ''),
+          subCategory: d.subCategory || null,
+          subCategorySlug: d.subCategorySlug || null,
           image: firstImage || null,
           images: firstImage ? [firstImage] : [],
           sizeVariants,
@@ -408,7 +410,8 @@ export async function getStaticProps() {
           sold: d.sold || d.salesCount || 0,
           minWholesale: d.minWholesale || d.min_wholesale || d.min_wholesale_qty || null,
           weight: d.weight != null ? Number(d.weight) : null,
-          video: d.video || null
+          video: d.video || null,
+          createdAt: d.createdAt?.toMillis?.() || Date.parse(d.createdAt) || 0
         });
       });
       // Exclude aquarium/fish categories and keywords
@@ -421,10 +424,18 @@ export async function getStaticProps() {
           .join(' ')?.toLowerCase() || '';
         return excludeKeywords.some(k => blob.includes(k));
       };
-      const filtered = lean.filter(p => !isExcluded(p));
+      let filtered = lean.filter(p => !isExcluded(p));
       const shuffle = arr => arr.sort(() => Math.random() - 0.5);
-      favoriteFish = shuffle([...filtered]).slice(0, 8);
-      recommendations = shuffle([...filtered]).slice(0, 12);
+      filtered.sort((a, b) => b.createdAt - a.createdAt);
+
+      const newestFavorites = filtered.slice(0, 4);
+      const remainingFavoritesPool = filtered.slice(4);
+      favoriteFish = newestFavorites.concat(shuffle([...remainingFavoritesPool]).slice(0, 4));
+
+      // Asumsi jika rekomendasi butuh data baru (bawahnya):
+      const newestRecommendations = remainingFavoritesPool.slice(0, 4);
+      const remainingRecPool = remainingFavoritesPool.slice(4);
+      recommendations = newestRecommendations.concat(shuffle([...remainingRecPool]).slice(0, 8));
     } catch (e) {
       console.error('Failed to load products for randomization', e);
     }

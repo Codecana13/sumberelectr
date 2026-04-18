@@ -39,19 +39,23 @@ const CategorySection = () => {
           id: d.id,
           name,
           slug,
+          parentId: data.parentId || null,
           img: data.icon || data.image || data.img || ''
         });
       });
 
+      // Hanya tampilkan kategori utama (tanpa parentId)
+      let mainCats = list.filter(c => !c.parentId);
+
       if (!shuffledRef.current) {
-        shuffle(list);
-        orderRef.current = list.map(c => c.id);
+        shuffle(mainCats);
+        orderRef.current = mainCats.map(c => c.id);
         shuffledRef.current = true;
-        setCategories(list);
+        setCategories(mainCats);
       } else {
         const oldOrder = orderRef.current;
-        const existing = oldOrder.map(id => list.find(c => c.id === id)).filter(Boolean);
-        const newOnes = list.filter(c => !oldOrder.includes(c.id));
+        const existing = oldOrder.map(id => mainCats.find(c => c.id === id)).filter(Boolean);
+        const newOnes = mainCats.filter(c => !oldOrder.includes(c.id));
         const merged = [...existing, ...newOnes];
         orderRef.current = merged.map(c => c.id);
         setCategories(merged);

@@ -495,6 +495,9 @@ async function buildDailyLayoutSummary() {
       description: p.description || '',
       video: p.video || null,
       category: p.category || '',
+      categorySlug: p.categorySlug || null,
+      subCategory: p.subCategory || null,
+      subCategorySlug: p.subCategorySlug || null,
       stock: p.stock ?? p.inStock ?? null
     };
   };
@@ -510,16 +513,15 @@ async function buildDailyLayoutSummary() {
     return excludeKeywords.some(k => blob.includes(k));
   };
 
-  // Pool besar untuk shuffle (bukan hanya rating tinggi)
-  const poolSize = 100;
-  const favoritesPool = all
-    .filter(p => !isExcluded(p))
-    .filter(p => (p.rating || 0) >= 4.0 && (p.sold || 0) > 0)
-    .sort((a,b) => (b.rating - a.rating) || (b.sold - a.sold))
-    .slice(0, poolSize);
-
-  // Pool rekomendasi: produk random dari semua yang aktif
-  const recPool = all.filter(p => (p.sold || 0) >= 0).filter(p => !isExcluded(p));
+  // Filter awal
+  let filteredAll = all.filter(p => !isExcluded(p));
+  
+  // Urutkan berdasarkan waktu buat
+  filteredAll.sort((a,b) => {
+    const timeA = a.createdAt || 0;
+    const timeB = b.createdAt || 0;
+    return timeB - timeA;
+  });
 
   // Seeded shuffle (berubah setiap hari)
   const seedString = today;
@@ -528,8 +530,13 @@ async function buildDailyLayoutSummary() {
   const rng = mulberry32(seed);
   function shuffleDet(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 
-  const favorites = shuffleDet(favoritesPool).slice(0,8).map(leanProduct);
-  const recommendations = shuffleDet(recPool).slice(0,12).map(leanProduct);
+  const newestFavorites = filteredAll.slice(0, 4);
+  const remainingFavoritesPool = filteredAll.slice(4);
+  const favorites = newestFavorites.concat(shuffleDet(remainingFavoritesPool).slice(0, 4)).map(leanProduct);
+
+  const newestRecommendations = remainingFavoritesPool.slice(4, 8);
+  const remainingRecPool = remainingFavoritesPool.slice(8);
+  const recommendations = newestRecommendations.concat(shuffleDet(remainingRecPool).slice(0, 8)).map(leanProduct);
 
   // Schema builder
   const BASE_URL = (process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.purodenka.com').replace(/\/$/, '');

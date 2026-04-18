@@ -61,8 +61,9 @@ const ProductCard = ({ product, onAddToCart }) => {
   }
 
   const { getFor } = useDiscounts();
+  const subCatKey = (product.subCategorySlug || product.subCategory || '').toString();
   const catKey = (product.categorySlug || product.category || '').toString();
-  const categoryDiscount = getFor(catKey);
+  const categoryDiscount = getFor(subCatKey) || getFor(catKey);
   const discount = Number(product.discount) || Number(categoryDiscount) || 0;
   const priceAfterDiscount =
     discount > 0 ? Math.round(minPrice * (1 - discount / 100)) : minPrice;

@@ -38,8 +38,9 @@ const PopupBuyNow = ({ show, onClose, product, userId, buyerName }) => {
       ? Number(val).toLocaleString('id-ID')
       : '0';
 
+  const subCatKey = (product.subCategorySlug || product.subCategory || '').toString();
   const catKey = (product.categorySlug || product.category || '').toString();
-  const categoryDiscount = getFor(catKey);
+  const categoryDiscount = getFor(subCatKey) || getFor(catKey);
   const discount = Number(product.discount) || Number(categoryDiscount) || 0;
   const variant = product.sizeVariants[selectedVariantIdx] || {};
   const retailPrice = Number(variant.priceRetail) || 0;
