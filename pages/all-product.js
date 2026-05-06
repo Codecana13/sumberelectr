@@ -83,6 +83,19 @@ const AllProductPage = () => {
         const pb = getMinPrice(b) || 0;
         return priceSort === 'asc' ? pa - pb : pb - pa;
       });
+    } else {
+      // Default sort: kategori → sub kategori → nama produk (abjad)
+      out = out.sort((a, b) => {
+        const catA = (a.category || '').toLowerCase();
+        const catB = (b.category || '').toLowerCase();
+        if (catA !== catB) return catA.localeCompare(catB, 'id');
+        const subA = (a.subCategory || '').toLowerCase();
+        const subB = (b.subCategory || '').toLowerCase();
+        if (subA !== subB) return subA.localeCompare(subB, 'id');
+        const nameA = (a.name || '').toLowerCase();
+        const nameB = (b.name || '').toLowerCase();
+        return nameA.localeCompare(nameB, 'id');
+      });
     }
     return out;
   }, [products, categoryFilter, priceSort, promoOnly]);

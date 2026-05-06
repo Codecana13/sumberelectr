@@ -505,6 +505,17 @@ export default function ProductListPage() {
       (p.categorySlug && p.categorySlug.toLowerCase().includes(searchTerm));
 
     return matchCategory && matchSearch;
+  }).sort((a, b) => {
+    // Urutkan berdasarkan kategori → sub kategori → nama produk (abjad)
+    const catA = (a.category || '').toLowerCase();
+    const catB = (b.category || '').toLowerCase();
+    if (catA !== catB) return catA.localeCompare(catB, 'id');
+    const subA = (a.subCategory || '').toLowerCase();
+    const subB = (b.subCategory || '').toLowerCase();
+    if (subA !== subB) return subA.localeCompare(subB, 'id');
+    const nameA = (a.name || '').toLowerCase();
+    const nameB = (b.name || '').toLowerCase();
+    return nameA.localeCompare(nameB, 'id');
   });
 
   // Pagination logic
@@ -520,6 +531,7 @@ export default function ProductListPage() {
       const data = filteredProducts.map((product) => ({
         'Product Name': product.name,
         'Category': product.category || '',
+        'Sub Category': product.subCategory || '',
         'Long Description': product.description || '',
         'short description': product.description?.slice(0, 140) || '',
         Price: Number(product.priceRetail || product.priceWholesale || 0) || '',
@@ -545,12 +557,16 @@ export default function ProductListPage() {
   const handleDownloadTemplate = () => {
     try {
       const headers = [
-        'Product Name','Category','Long Description','short description','Price','Currency','Stock','SKU','Package Weight','Product Image 1','Product Image 2','Product Image 3'
+        'Product Name','Category','Sub Category','Long Description','short description','Price','Currency','Stock','SKU','Package Weight','Product Image 1','Product Image 2','Product Image 3'
       ];
-      const firstCategory = categoryDocs[0]?.name || 'Elektrikal';
+      const mainCats = categoryDocs.filter(c => !c.parentId);
+      const firstCategory = mainCats[0]?.name || 'Elektrikal';
+      const firstSubCats = categoryDocs.filter(c => c.parentId === mainCats[0]?.id);
+      const firstSubCategory = firstSubCats[0]?.name || '';
       const sampleRow = {
         'Product Name': 'Power Supply 12V 100W Yamasaki',
         'Category': firstCategory,
+        'Sub Category': firstSubCategory,
         'Long Description': 'Power Supply 12V 100W Yamasaki untuk rangkaian elektronik',
         'short description': 'Power Supply 12V 100W',
         'Price': 217500,
@@ -566,9 +582,12 @@ export default function ProductListPage() {
       const worksheet = XLSX.utils.aoa_to_sheet(wsData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Template-XL');
-      // Tambahkan sheet daftar kategori untuk referensi pilihan
-      const catSheetData = [['Name','Slug']].concat(
-        (categoryDocs || []).map(c => [c.name, c.slug])
+      // Tambahkan sheet daftar kategori & sub kategori untuk referensi pilihan
+      const catSheetData = [['Name','Slug','Type','Parent']].concat(
+        (categoryDocs || []).map(c => {
+          const parent = c.parentId ? categoryDocs.find(p => p.id === c.parentId) : null;
+          return [c.name, c.slug, c.parentId ? 'Sub Category' : 'Category', parent?.name || ''];
+        })
       );
       const wsCats = XLSX.utils.aoa_to_sheet(catSheetData);
       XLSX.utils.book_append_sheet(workbook, wsCats, 'Categories');
@@ -576,7 +595,8 @@ export default function ProductListPage() {
       const guide = [
         ['Kolom', 'Deskripsi'],
         ['Product Name', 'Nama produk'],
-        ['Category', 'Nama kategori sesuai daftar pada sheet "Categories" (wajib)'],
+        ['Category', 'Nama kategori utama sesuai daftar pada sheet "Categories" (wajib)'],
+        ['Sub Category', 'Nama sub kategori sesuai daftar pada sheet "Categories" (opsional)'],
         ['Long Description', 'Deskripsi panjang (boleh HTML sederhana)'],
         ['short description', 'Ringkasan singkat'],
         ['Price', 'Harga retail (IDR)'],
@@ -691,6 +711,7 @@ export default function ProductListPage() {
         if (isVendorFormat) {
           const name = String(row['Product Name'] || row['product name'] || '').trim();
           const categoryRaw = String(row['Category'] || row['category'] || '').trim();
+          const subCategoryRaw = String(row['Sub Category'] || row['sub category'] || row['SubCategory'] || row['subcategory'] || '').trim();
           const descriptionLong = row['Long Description'] || row['long description'] || '';
           const shortDesc = row['short description'] || row['Short Description'] || '';
           const price = Number(row['Price'] || row['price'] || 0);
@@ -708,8 +729,9 @@ export default function ProductListPage() {
             errors.push(`Baris ${line}: Category wajib diisi.`);
             return;
           }
-          // Cocokkan kategori by name atau slug (case-insensitive)
+          // Cocokkan kategori by name atau slug (case-insensitive), hanya kategori utama
           const catDoc = categoryDocs.find(c => {
+            if (c.parentId) return false; // skip sub categories
             const nm = (c.name || '').toString().toLowerCase();
             const sl = (c.slug || '').toString().toLowerCase();
             const key = categoryRaw.toLowerCase();
@@ -721,6 +743,29 @@ export default function ProductListPage() {
           }
           const categorySlug = catDoc.slug || getCategorySlug(categoryRaw);
           const categoryId = catDoc.id || null;
+
+          // Cocokkan sub kategori (opsional)
+          let subCategory = null;
+          let subCategoryId = null;
+          let subCategorySlug = null;
+          if (subCategoryRaw) {
+            const subCatDoc = categoryDocs.find(c => {
+              if (c.parentId !== categoryId) return false;
+              const nm = (c.name || '').toString().toLowerCase();
+              const sl = (c.slug || '').toString().toLowerCase();
+              const key = subCategoryRaw.toLowerCase();
+              return nm === key || sl === key;
+            });
+            if (subCatDoc) {
+              subCategory = subCatDoc.name;
+              subCategoryId = subCatDoc.id;
+              subCategorySlug = subCatDoc.slug || getCategorySlug(subCategoryRaw);
+            } else {
+              errors.push(`Baris ${line}: Sub Category '${subCategoryRaw}' tidak ditemukan untuk kategori '${catDoc.name}'.`);
+              return;
+            }
+          }
+
           const productSlug = slugify(name);
           const sold = 0;
           const rating = 0;
@@ -731,6 +776,9 @@ export default function ProductListPage() {
             category: catDoc.name,
             categoryId,
             categorySlug,
+            subCategory: subCategory || null,
+            subCategoryId: subCategoryId || null,
+            subCategorySlug: subCategorySlug || null,
             minWholesale: 1,
             stock,
             weight: toGrams(pkgWeight),
