@@ -1,0 +1,26 @@
+# robots.txt for Purodenka
+# Update the Sitemap URL if you generate one (optional)
+
+User-agent: *
+Allow: /
+
+# Allow crawling for article pages
+Allow: /article/
+Allow: /article/*
+
+# Block API and private/utility pages
+Disallow: /api/
+Disallow: /account/
+Disallow: /account/admin/
+Disallow: /admin/
+Disallow: /cart/
+Disallow: /login
+Disallow: /register
+Disallow: /register-buyer
+Disallow: /please-verify
+Disallow: /unauthorized
+Disallow: /product/payment/
+Disallow: /search
+
+# Optional: point to your sitemap if available
+Sitemap: https://www.purodenka.com/sitemap.xml

@@ -1,0 +1,10 @@
+{
+  "login": "Login ke Nusafin",
+  "email": "Email",
+  "password": "Password",
+  "submit": "Masuk",
+  "noAccount": "Belum punya akun?",
+  "registerHere": "Daftar di sini",
+  "invalidCredentials": "Email atau password salah",
+  "loading": "Memuat..."
+}

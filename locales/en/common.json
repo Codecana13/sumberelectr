@@ -1,0 +1,11 @@
+{
+  "login": "Login to Nusafin",
+  "email": "Email",
+  "password": "Password",
+  "submit": "Login",
+  "noAccount": "Don't have an account?",
+  "registerHere": "Register here",
+  "loading": "Loading...",
+  "invalidCredentials": "Invalid email or password"
+}
+
