@@ -3,7 +3,9 @@ import Head from 'next/head';
 import MiniNavbar from '@/components/MiniNavbar';
 import ProductCard from '@/components/ProductCard';
 import ProductSortBar from '@/components/ProductSortBar';
+import ProductSidebar from '@/components/ProductSidebar';
 import Footer from '@/components/Footer';
+import { FaChevronDown } from 'react-icons/fa';
 import { useAuth } from '@/context/AuthContext';
 import { firestore } from '@/utils/firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
@@ -15,10 +17,12 @@ const AllProductPage = () => {
   const [loading, setLoading] = useState(true);
 
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [subCategoryFilter, setSubCategoryFilter] = useState('');
   const [priceSort, setPriceSort] = useState('none');
   const [promoOnly, setPromoOnly] = useState(false);
   const [sortMode, setSortMode] = useState('default');
   const [page, setPage] = useState(1);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [pageSize, setPageSize] = useState(16); // default desktop
 
   useEffect(() => {
@@ -90,10 +94,28 @@ const AllProductPage = () => {
     setPage(1);
   };
 
+  // Get active category slug for the sidebar
+  const activeCategory = useMemo(() => {
+    return categories.find(c => c.name === categoryFilter && !c.parentId);
+  }, [categories, categoryFilter]);
+
+  const activeCategorySlug = activeCategory?.slug || '';
+
+  // Get active subcategory slug for the sidebar
+  const activeSubCategory = useMemo(() => {
+    if (!activeCategory) return null;
+    return categories.find(c => c.name === subCategoryFilter && c.parentId === activeCategory.id);
+  }, [categories, subCategoryFilter, activeCategory]);
+
+  const activeSubCategorySlug = activeSubCategory?.slug || '';
+
   const filtered = useMemo(() => {
     let out = products.slice();
     if (categoryFilter) {
       out = out.filter(p => (p.category || '').toLowerCase() === String(categoryFilter).toLowerCase());
+    }
+    if (subCategoryFilter) {
+      out = out.filter(p => (p.subCategory || '').toLowerCase() === String(subCategoryFilter).toLowerCase());
     }
     if (promoOnly) {
       out = out.filter(p => Number(p.discount) > 0).sort((a,b) => (Number(b.discount)||0) - (Number(a.discount)||0));
@@ -138,7 +160,7 @@ const AllProductPage = () => {
         break;
     }
     return out;
-  }, [products, categoryFilter, priceSort, promoOnly, sortMode]);
+  }, [products, categoryFilter, subCategoryFilter, priceSort, promoOnly, sortMode]);
 
   // Pagination logic
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -184,80 +206,152 @@ const AllProductPage = () => {
             : "max-w-7xl mx-auto px-4 py-6 mt-4"
         }
       >
-        <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <h1 className="text-2xl font-bold text-red-700">Semua Produk</h1>
+        <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-8 items-start">
+          {/* Sidebar */}
+          <div className="hidden lg:block">
+            <ProductSidebar
+              currentCategorySlug={activeCategorySlug}
+              currentSubCategorySlug={activeSubCategorySlug}
+              onCategorySelect={(name, slug) => {
+                setCategoryFilter(name);
+                setSubCategoryFilter('');
+                setPage(1);
+              }}
+              onSubCategorySelect={(name, slug) => {
+                setSubCategoryFilter(name);
+                setPage(1);
+              }}
+              onClearFilters={() => {
+                setCategoryFilter('');
+                setSubCategoryFilter('');
+                setPage(1);
+              }}
+            />
+          </div>
 
-          <div className="w-full md:w-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 gap-3 w-full">
-              <select
-                value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value)}
-                className="px-3 py-2 border rounded-lg bg-white w-full sm:w-auto min-w-0"
-              >
-                <option value="">Semua Kategori</option>
-                {categories.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+          {/* Sidebar Drawer (Mobile) */}
+          <ProductSidebar
+            isMobile
+            isOpen={isMobileSidebarOpen}
+            onClose={() => setIsMobileSidebarOpen(false)}
+            currentCategorySlug={activeCategorySlug}
+            currentSubCategorySlug={activeSubCategorySlug}
+            onCategorySelect={(name, slug) => {
+              setCategoryFilter(name);
+              setSubCategoryFilter('');
+              setPage(1);
+              setIsMobileSidebarOpen(false);
+            }}
+            onSubCategorySelect={(name, slug) => {
+              setSubCategoryFilter(name);
+              setPage(1);
+              setIsMobileSidebarOpen(false);
+            }}
+            onClearFilters={() => {
+              setCategoryFilter('');
+              setSubCategoryFilter('');
+              setPage(1);
+              setIsMobileSidebarOpen(false);
+            }}
+          />
 
-              <select
-                value={priceSort}
-                onChange={e => handlePriceSortChange(e.target.value)}
-                className="px-3 py-2 border rounded-lg bg-white w-full sm:w-auto min-w-0 lg:hidden"
-              >
-                <option value="none">Urutkan: Default</option>
-                <option value="asc">Harga: Terendah</option>
-                <option value="desc">Harga: Tertinggi</option>
-              </select>
+          {/* Main content */}
+          <div>
+            <div className="mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <h1 className="text-2xl font-bold text-red-700">Semua Produk</h1>
 
-              <label className="inline-flex items-center gap-2 self-start sm:self-center">
-                <input type="checkbox" checked={promoOnly} onChange={e => setPromoOnly(e.target.checked)} className="form-checkbox h-4 w-4 text-orange-600" />
-                <span className="text-sm">Promo</span>
-              </label>
+              <div className="w-full md:w-auto">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 gap-3 w-full">
+                  {/* Category Filter Trigger for Mobile */}
+                  <button
+                    onClick={() => setIsMobileSidebarOpen(true)}
+                    className="flex items-center justify-between gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 shadow-sm active:scale-[0.98] transition-all w-full sm:w-auto cursor-pointer"
+                  >
+                    <span className="truncate">
+                      Kategori: {categoryFilter ? `${categoryFilter}${subCategoryFilter ? ` › ${subCategoryFilter}` : ''}` : 'Semua'}
+                    </span>
+                    <FaChevronDown size={10} className="text-gray-400" />
+                  </button>
+
+                  <select
+                    value={priceSort}
+                    onChange={e => handlePriceSortChange(e.target.value)}
+                    className="px-3 py-2 border rounded-lg bg-white w-full sm:w-auto min-w-0 lg:hidden"
+                  >
+                    <option value="none">Urutkan: Default</option>
+                    <option value="asc">Harga: Terendah</option>
+                    <option value="desc">Harga: Tertinggi</option>
+                  </select>
+
+                  <label className="inline-flex items-center gap-2 self-start sm:self-center">
+                    <input type="checkbox" checked={promoOnly} onChange={e => setPromoOnly(e.target.checked)} className="form-checkbox h-4 w-4 text-orange-600" />
+                    <span className="text-sm">Promo</span>
+                  </label>
+                </div>
+              </div>
             </div>
+
+            <ProductSortBar
+              activeSort={sortMode}
+              onSortChange={handleSortModeChange}
+              totalCount={filtered.length}
+            />
+
+            {/* Filter tags (visual cue for selected subcategory) */}
+            {subCategoryFilter && (
+              <div className="mb-4 flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500 font-medium">Filter Aktif:</span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-700 text-xs font-semibold rounded-full border border-red-100">
+                  {subCategoryFilter}
+                  <button 
+                    onClick={() => {
+                      setSubCategoryFilter('');
+                      setPage(1);
+                    }}
+                    className="hover:text-red-900 font-bold ml-1 cursor-pointer focus:outline-none"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            )}
+
+            <div className="mb-4 text-sm text-gray-600">
+              Menampilkan {pagedProducts.length} dari {filtered.length} produk
+            </div>
+
+            {loading ? (
+              <div className="text-gray-500">Memuat produk...</div>
+            ) : filtered.length === 0 ? (
+              <div className="text-gray-500">Tidak ada produk sesuai filter.</div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {pagedProducts.map(p => (
+                    <ProductCard key={p.id} product={p} />
+                  ))}
+                </div>
+                <div className="flex justify-center items-center gap-4 mt-6">
+                  <button
+                    className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold disabled:opacity-50"
+                    disabled={page === 1}
+                    onClick={() => setPage(page - 1)}
+                  >
+                    Prev
+                  </button>
+                  <span className="text-sm">Halaman {page} dari {totalPages}</span>
+                  <button
+                    className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold disabled:opacity-50"
+                    disabled={page === totalPages}
+                    onClick={() => setPage(page + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
-
-        <ProductSortBar
-          activeSort={sortMode}
-          onSortChange={handleSortModeChange}
-          totalCount={filtered.length}
-        />
-
-        <div className="mb-4 text-sm text-gray-600">
-          Menampilkan {pagedProducts.length} dari {filtered.length} produk
-        </div>
-
-        {loading ? (
-          <div className="text-gray-500">Memuat produk...</div>
-        ) : filtered.length === 0 ? (
-          <div className="text-gray-500">Tidak ada produk sesuai filter.</div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-              {pagedProducts.map(p => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
-            <div className="flex justify-center items-center gap-4 mt-6">
-              <button
-                className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold disabled:opacity-50"
-                disabled={page === 1}
-                onClick={() => setPage(page - 1)}
-              >
-                Prev
-              </button>
-              <span className="text-sm">Halaman {page} dari {totalPages}</span>
-              <button
-                className="px-4 py-2 rounded bg-gray-200 text-gray-700 font-semibold disabled:opacity-50"
-                disabled={page === totalPages}
-                onClick={() => setPage(page + 1)}
-              >
-                Next
-              </button>
-            </div>
-          </>
-        )}
       </main>
       {!user && <Footer />}
     </div>

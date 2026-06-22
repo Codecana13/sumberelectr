@@ -1,12 +1,15 @@
 // pages/category/[category].js
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { firestore } from '@/utils/firebase';
 import ProductCard from '@/components/ProductCard';
 import ProductSortBar from '@/components/ProductSortBar';
+import ProductSidebar from '@/components/ProductSidebar';
 import MiniNavbar from '@/components/MiniNavbar';
-import Footer from '@/components/Footer';
+
 import Head from 'next/head';
+import { FaChevronDown } from 'react-icons/fa';
 
 export async function getServerSideProps(context) {
   const { category } = context.params;
@@ -39,7 +42,16 @@ export async function getServerSideProps(context) {
 }
 
 export default function CategoryPage({ category, products }) {
+  const router = useRouter();
   const [sortMode, setSortMode] = useState('default');
+  const [subCategoryFilter, setSubCategoryFilter] = useState('');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Reset subcategory filter when category slug changes
+  useEffect(() => {
+    setSubCategoryFilter('');
+    setIsMobileSidebarOpen(false);
+  }, [category]);
 
   const readableCategory = category.replace(/-/g, ' ');
   const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://www.purodenka.com').replace(/\/$/, '');
@@ -60,9 +72,13 @@ export default function CategoryPage({ category, products }) {
     } catch { return 0; }
   };
 
-  // Sort products client-side
+  // Sort and filter products client-side
   const sortedProducts = useMemo(() => {
     let out = products.slice();
+
+    if (subCategoryFilter) {
+      out = out.filter(p => (p.subCategorySlug || p.subCategory || '').toLowerCase() === subCategoryFilter.toLowerCase());
+    }
 
     switch (sortMode) {
       case 'az':
@@ -89,7 +105,7 @@ export default function CategoryPage({ category, products }) {
         break;
     }
     return out;
-  }, [products, sortMode]);
+  }, [products, sortMode, subCategoryFilter]);
 
   return (
     <>
@@ -118,31 +134,109 @@ export default function CategoryPage({ category, products }) {
             : "max-w-7xl mx-auto px-4 py-6 mt-4"
         }
       >
-        <h1 className="text-2xl font-bold text-red-700 mb-6">
-          {readableCategory}
-        </h1>
-
-        <ProductSortBar
-          activeSort={sortMode}
-          onSortChange={(mode) => setSortMode(mode)}
-          totalCount={sortedProducts.length}
-        />
-
-        {sortedProducts.length === 0 ? (
-          <p className="text-center text-lg text-gray-600">
-            Tidak ada produk untuk kategori &quot;{readableCategory}&quot;
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {sortedProducts.map((product) => (
-              <div key={product.id} className="block hover:bg-red-50 rounded-lg transition">
-                <ProductCard product={product} />
-              </div>
-            ))}
+        <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-8 items-start">
+          {/* Sidebar (Desktop) */}
+          <div className="hidden lg:block">
+            <ProductSidebar
+              currentCategorySlug={category}
+              currentSubCategorySlug={subCategoryFilter}
+              onCategorySelect={(name, slug) => {
+                if (slug !== category) {
+                  router.push(`/category/${slug}`);
+                } else {
+                  setSubCategoryFilter('');
+                }
+              }}
+              onSubCategorySelect={(name, slug) => {
+                setSubCategoryFilter(slug || '');
+              }}
+              onClearFilters={() => {
+                setSubCategoryFilter('');
+              }}
+            />
           </div>
-        )}
+
+          {/* Sidebar Drawer (Mobile) */}
+          <ProductSidebar
+            isMobile
+            isOpen={isMobileSidebarOpen}
+            onClose={() => setIsMobileSidebarOpen(false)}
+            currentCategorySlug={category}
+            currentSubCategorySlug={subCategoryFilter}
+            onCategorySelect={(name, slug) => {
+              if (slug !== category) {
+                router.push(`/category/${slug}`);
+              } else {
+                setSubCategoryFilter('');
+              }
+              setIsMobileSidebarOpen(false);
+            }}
+            onSubCategorySelect={(name, slug) => {
+              setSubCategoryFilter(slug || '');
+              setIsMobileSidebarOpen(false);
+            }}
+            onClearFilters={() => {
+              setSubCategoryFilter('');
+              setIsMobileSidebarOpen(false);
+            }}
+          />
+
+          {/* Main content */}
+          <div>
+            <h1 className="text-2xl font-bold text-red-700 mb-6 capitalize">
+              {readableCategory}
+            </h1>
+
+            {/* Mobile Category Trigger */}
+            <div className="mb-4 lg:hidden">
+              <button
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="flex items-center justify-between gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 shadow-sm active:scale-[0.98] transition-all w-full sm:w-auto cursor-pointer"
+              >
+                <span>Pilih Brand: {subCategoryFilter ? subCategoryFilter.replace(/-/g, ' ') : 'Semua'}</span>
+                <FaChevronDown size={10} className="text-gray-400" />
+              </button>
+            </div>
+
+            <ProductSortBar
+              activeSort={sortMode}
+              onSortChange={(mode) => setSortMode(mode)}
+              totalCount={sortedProducts.length}
+            />
+
+            {/* Filter tags (visual cue for selected subcategory) */}
+            {subCategoryFilter && (
+              <div className="mb-4 flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500 font-medium">Filter Aktif:</span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-700 text-xs font-semibold rounded-full border border-red-100">
+                  {subCategoryFilter.replace(/-/g, ' ')}
+                  <button 
+                    onClick={() => setSubCategoryFilter('')}
+                    className="hover:text-red-900 font-bold ml-1 cursor-pointer focus:outline-none"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            )}
+
+            {sortedProducts.length === 0 ? (
+              <p className="text-center text-lg text-gray-600">
+                Tidak ada produk untuk kategori &quot;{readableCategory}&quot;
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {sortedProducts.map((product) => (
+                  <div key={product.id} className="block hover:bg-red-50 rounded-lg transition">
+                    <ProductCard product={product} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </main>
-      <Footer />
+     
     </>
   );
 }
