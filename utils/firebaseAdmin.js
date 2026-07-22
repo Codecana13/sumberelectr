@@ -33,10 +33,5 @@ if (!getApps().length) {
 const adminDb = getFirestore(adminApp);
 const adminAuth = getAuth(adminApp);
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON))
-  });
-}
-
+// Removed redundant admin.initializeApp since adminApp is already initialized above.
 export { adminApp, adminDb, adminAuth };
