@@ -773,7 +773,6 @@ export async function getStaticProps({ params }) {
     const subSnap = await adminDb
       .collection('products')
       .where(field, '==', searchCat)
-      .limit(30)
       .get();
     subcategoryProducts = subSnap.docs.map(serializeProductDoc);
   }

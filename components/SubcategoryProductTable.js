@@ -264,6 +264,8 @@ const TableRow = ({ product, currentProductId, cartItems }) => {
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────────
 export default function SubcategoryProductTable({ products, currentProductId }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [phaseFilter, setPhaseFilter] = useState(''); // '', '1P', '2P', '3P', '4P'
+  const [typeFilter, setTypeFilter] = useState('');   // '', 'H', 'F', 'N', 'B', etc.
   const [cartItems, setCartItems] = useState([]);
   
   useEffect(() => {
@@ -287,14 +289,72 @@ export default function SubcategoryProductTable({ products, currentProductId }) 
   
   if (!products || products.length === 0) return null;
 
-  const filtered = products.filter(p =>
-    p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.sku || p.id)?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Detect if this subcategory should show phase filter (MCB / MCCB)
+  // Note: "mcb" is NOT a substring of "mccb" (m-c-c-b), so we must check both
+  const hasPhaseFilter = products.some(p => {
+    const sub = (p.subCategory || p.subCategorySlug || '').toLowerCase();
+    const name = (p.name || '').toLowerCase();
+    return sub.includes('mcb') || sub.includes('mccb') || name.includes('mcb') || name.includes('mccb');
+  });
+
+  // Detect if products are MCCB (for Type filter)
+  const isMCCB = products.some(p => {
+    const name = (p.name || '').toLowerCase();
+    const sub = (p.subCategory || p.subCategorySlug || '').toLowerCase();
+    return name.includes('mccb') || sub.includes('mccb');
+  });
+
+  // Extract phase from product name
+  const getPhase = (name) => {
+    if (!name) return null;
+    const upper = name.toUpperCase();
+    for (let p = 4; p >= 1; p--) {
+      const tag = `${p}P`;
+      const idx = upper.indexOf(tag);
+      if (idx >= 0) {
+        const charBefore = idx === 0 ? ' ' : upper[idx - 1];
+        const charAfter = idx + tag.length >= upper.length ? ' ' : upper[idx + tag.length];
+        const beforeOk = !/[A-Z0-9]/.test(charBefore);
+        const afterOk = !/[A-Z0-9]/.test(charAfter);
+        if (beforeOk && afterOk) return tag;
+      }
+    }
+    return null;
+  };
+
+  // Extract MCCB type letter from model code: EZC250H → "H", NSX100F → "F", CVS250N → "N"
+  // Pattern: 2+ letters followed by digits followed by a single type letter
+  const getMCCBType = (name) => {
+    if (!name) return null;
+    const match = name.toUpperCase().match(/\b([A-Z]{2,}\d+)([A-Z])\b/);
+    return match ? match[2] : null;
+  };
+
+  // Get available phases from products
+  const availablePhases = hasPhaseFilter
+    ? [...new Set(products.map(p => getPhase(p.name)).filter(Boolean))].sort()
+    : [];
+
+  // Get available MCCB types from products (only if MCCB)
+  const availableTypes = isMCCB
+    ? [...new Set(products.map(p => getMCCBType(p.name)).filter(Boolean))].sort()
+    : [];
+
+  // Apply search + phase + type filter
+  const filtered = products.filter(p => {
+    const matchesSearch =
+      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.sku || p.id)?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesPhase = !phaseFilter || getPhase(p.name) === phaseFilter;
+    const matchesType = !typeFilter || getMCCBType(p.name) === typeFilter;
+    return matchesSearch && matchesPhase && matchesType;
+  });
 
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
   };
+
+  const activeFilterCount = (searchTerm ? 1 : 0) + (phaseFilter ? 1 : 0) + (typeFilter ? 1 : 0);
 
   return (
     <div className="mt-12 bg-white p-4 lg:p-6 rounded-xl border shadow-sm mb-4">
@@ -302,11 +362,71 @@ export default function SubcategoryProductTable({ products, currentProductId }) 
         Pilih jenis produk yang diinginkan
       </h2>
 
+      {/* Phase Filter (only for MCCB) */}
+      {hasPhaseFilter && availablePhases.length >= 1 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">Phase:</span>
+          <button
+            onClick={() => setPhaseFilter('')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
+              !phaseFilter
+                ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-red-300 hover:text-red-600'
+            }`}
+          >
+            Semua
+          </button>
+          {availablePhases.map(phase => (
+            <button
+              key={phase}
+              onClick={() => setPhaseFilter(phaseFilter === phase ? '' : phase)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
+                phaseFilter === phase
+                  ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-red-300 hover:text-red-600'
+              }`}
+            >
+              {phase}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Type Filter (MCCB with type pattern) */}
+      {isMCCB && availableTypes.length >= 1 && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">Type:</span>
+          <button
+            onClick={() => setTypeFilter('')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
+              !typeFilter
+                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300 hover:text-blue-600'
+            }`}
+          >
+            Semua
+          </button>
+          {availableTypes.map(type => (
+            <button
+              key={type}
+              onClick={() => setTypeFilter(typeFilter === type ? '' : type)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
+                typeFilter === type
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300 hover:text-blue-600'
+              }`}
+            >
+              Type {type}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Header: info + search */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
         <p className="text-sm text-gray-500">
           Menampilkan <span className="font-semibold text-gray-700">{filtered.length}</span> produk
-          {searchTerm && <span className="ml-1 text-gray-400">(dari {products.length} total)</span>}
+          {activeFilterCount > 0 && <span className="ml-1 text-gray-400">(dari {products.length} total)</span>}
         </p>
         <input
           type="text"
